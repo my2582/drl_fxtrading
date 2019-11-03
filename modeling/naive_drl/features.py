@@ -1,20 +1,20 @@
 import numpy as np
 import pandas as pd
 
-def generate_episode(X, n, cur, ep_size):    
+def generate_episode(X, n, cur, epi_size):    
     '''
     Input:
         X: data (bid/ask for each currency pair)
         n: get the n-th episode
         cur: target currency
-        ep_size, size of episode
+        epi_size, size of episode
     '''
     
     ts = np.sort(X['timestamp'].unique()) # all timestamps
     ccy = X['ccy'].unique() # all currency pairs
     
-    start_idx = n * ep_size
-    end_idx = min((n+1) * ep_size, ts.size) - 1
+    start_idx = n * epi_size
+    end_idx = min((n+1) * epi_size, ts.size) - 1
     data = X[(X.timestamp>=ts[start_idx]) & (X.timestamp<=ts[end_idx])]
      
     i = 0
@@ -56,13 +56,13 @@ def get_features(target_bid, target_ask, other_bid, other_ask, lag):
     normalized_fs = (features - features.mean()) / features.std()
     return normalized_fs
 
-def draw_episode(X, cur, n, ep_size, lag):
+def draw_episode(X, cur, n, epi_size, lag):
     '''
     Input:
         X: data (bid/ask for each currency pair)
         cur, currency pair that we target to trade
         n, draw the n-th episode
-        ep_size, size of episode
+        epi_size, size of episode
         lag, number of lag log-returns z_1,...z_m
     Output:
         target_bid: target currency's bid prices
@@ -72,7 +72,7 @@ def draw_episode(X, cur, n, ep_size, lag):
     Note: compared to Dai's code, I am not using min_history (min length of a valid episode) as argument; 
         Also, I am not randomly selecting episodes
     '''
-    target_bid, target_ask, other_bid, other_ask = generate_episode(X, n, cur, ep_size)
+    target_bid, target_ask, other_bid, other_ask = generate_episode(X, n, cur, epi_size)
     features = get_features(target_bid, target_ask, other_bid, other_ask, lag)
     return target_bid, target_ask, features
 
