@@ -1,20 +1,20 @@
 import numpy as np
 import pandas as pd
 
-def generate_episode(X, n, cur, epi_size):    
+def generate_episode(X, n, cur, split_sz, ts, ccy):    
     '''
     Input:
         X: data (bid/ask for each currency pair)
         n: get the n-th episode
         cur: target currency
-        epi_size, size of episode
+        split_sz: size of one split. len(split) == len(batch) + len(lag).
+                  The number of episodes is int()
+        ts: a numpy array of unique time stamps
+        ccy: a Series of unique currency pairs
     '''
-    
-    ts = np.sort(X['timestamp'].unique()) # all timestamps
-    ccy = X['ccy'].unique() # all currency pairs
-    
-    start_idx = n * epi_size
-    end_idx = min((n+1) * epi_size, ts.size) - 1
+
+    start_idx = n * split_sz
+    end_idx = min((n+1) * split_sz, ts.size) - 1
     data = X[(X.timestamp>=ts[start_idx]) & (X.timestamp<=ts[end_idx])]
      
     i = 0
@@ -29,7 +29,7 @@ def generate_episode(X, n, cur, epi_size):
             other_bid[:,i] = tmp['bid_price'].values
             other_ask[:,i] = tmp['ask_price'].values
             i += 1
-    return target_bid, target_ask, other_bid, other_ask
+    return target_bid, target_ask, other_bid, other_ask, data[data.ccy == cur]
 
 def log_returns(prices, lag):
     '''
@@ -56,14 +56,16 @@ def get_features(target_bid, target_ask, other_bid, other_ask, lag):
     normalized_fs = (features - features.mean()) / features.std()
     return normalized_fs
 
-def draw_episode(X, cur, n, epi_size, lag):
+def draw_episode(X, cur, n, split_sz, lag, ts, ccy):
     '''
     Input:
         X: data (bid/ask for each currency pair)
-        cur, currency pair that we target to trade
-        n, draw the n-th episode
-        epi_size, size of episode
-        lag, number of lag log-returns z_1,...z_m
+        cur: currency pair that we target to trade
+        n: draw the n-th episode
+        split_sz: size of episode
+        lag: number of lag log-returns z_1,...z_m
+        ts: a numpy array of unique time stamps
+        ccy: a Series of unique currency pairs
     Output:
         target_bid: target currency's bid prices
         target_ask: target currency's ask prices
@@ -72,7 +74,7 @@ def draw_episode(X, cur, n, epi_size, lag):
     Note: compared to Dai's code, I am not using min_history (min length of a valid episode) as argument; 
         Also, I am not randomly selecting episodes
     '''
-    target_bid, target_ask, other_bid, other_ask = generate_episode(X, n, cur, epi_size)
+    target_bid, target_ask, other_bid, other_ask, X_episode = generate_episode(X, n, cur, split_sz, ts, ccy)
     features = get_features(target_bid, target_ask, other_bid, other_ask, lag)
-    return target_bid, target_ask, features
+    return target_bid[lag-1:], target_ask[lag-1:], features, X_episode
 
