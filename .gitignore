@@ -95,4 +95,4 @@ mypythonfile.py
 dataset/
 
 # Visual studio
-vscode/
+.vscode/
