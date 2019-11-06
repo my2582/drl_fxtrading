@@ -29,7 +29,7 @@ def generate_episode(X, n, cur, split_sz, ts, ccy):
             other_bid[:,i] = tmp['bid_price'].values
             other_ask[:,i] = tmp['ask_price'].values
             i += 1
-    return target_bid, target_ask, other_bid, other_ask, data[data.ccy == cur]
+    return target_bid, target_ask, other_bid, other_ask
 
 def log_returns(prices, lag):
     '''
@@ -74,7 +74,7 @@ def draw_episode(X, cur, n, split_sz, lag, ts, ccy):
     Note: compared to Dai's code, I am not using min_history (min length of a valid episode) as argument; 
         Also, I am not randomly selecting episodes
     '''
-    target_bid, target_ask, other_bid, other_ask, X_episode = generate_episode(X, n, cur, split_sz, ts, ccy)
+    target_bid, target_ask, other_bid, other_ask = generate_episode(X, n, cur, split_sz, ts, ccy)
     features = get_features(target_bid, target_ask, other_bid, other_ask, lag)
-    return target_bid[lag-1:], target_ask[lag-1:], features, X_episode
+    return target_bid[lag-1:], target_ask[lag-1:], features
 
