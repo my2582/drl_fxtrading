@@ -100,7 +100,7 @@ class SimpleDRLAgent:
         rec_wt = np.zeros((self.config['epi_sz'],))
         delta_wt = np.zeros((self.config['epi_sz'],))
         immed_rewards = np.zeros((self.config['epi_sz'],))
-        accum_rewards = np.zeros((self.config['epi_sz'],))
+        accum_rewards = np.zeros((self.config['total_no_epi'],))
 
         # action_history = np.empty((self.config['epi_sz'],))
         obs_history = np.zeros((self.config['epi_sz'],) + (self.config['obs_sz'],))
@@ -114,6 +114,7 @@ class SimpleDRLAgent:
         
         # mean reversion agent
         mean_rev_lookback = 20
+        accum_losses = np.zeros((self.config['total_no_epi'],))
 
         # Training loop
         for epoch in range(self.config['epochs']):
@@ -127,7 +128,6 @@ class SimpleDRLAgent:
                 immed_rewards = np.zeros((self.config['epi_sz'],))
                 accum_rewards = np.zeros((self.config['epi_sz'],))
                 mean_rev_accum_rewards = np.zeros((self.config['epi_sz'],))
-
 
                 # action_history = np.empty((self.config['epi_sz'],))
                 obs_history = np.zeros((self.config['epi_sz'],) + (self.config['obs_sz'],))
@@ -233,13 +233,14 @@ class SimpleDRLAgent:
 
                 ### end of all batches ###
                 losses = self.model.train_on_batch(obs_history, immed_rewards)
+                accum_losses[epi_idx] = losses
 
                 print('Epoch:{} Episode:{}. The training loss is {}. The DRL total reward is {} vs A baseline total reward is {}. DRL - Baseline = {}'.format(epoch+1, epi_idx+1, losses, accum_rewards[t], mean_rev_accum_rewards[t], accum_rewards[t] - mean_rev_accum_rewards[t]))
             
             ### enf of one epoch ##
             epochs_total_rewards.append(accum_rewards[-1])
         
-        return accum_rewards, mean_rev_accum_rewards
+        return accum_rewards, mean_rev_accum_rewards, accum_losses
 
 
     def val(self):

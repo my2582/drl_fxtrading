@@ -3,9 +3,8 @@ from tensorflow.keras.layers import Dense, Dropout
 from tensorflow.keras import Model
 
 class SimpleModel(Model):
-    def __init__(self, action_set):
+    def __init__(self):
         super(SimpleModel, self).__init__('simple_net')
-        self.action_set = action_set
         self.fc1 = Dense(units=128, activation='relu')
         self.dropout = Dropout(0.2)
         self.fc2 = Dense(units=32, activation='relu')
