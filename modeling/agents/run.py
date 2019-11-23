@@ -41,6 +41,8 @@ config['batch_sz'] = 64
 config['num_batches'] = 100
 config['start_learning'] = 5000
 config['M'] = 9     # The number of currency pairs to invest in.
+config['N'] = 23    # The number of bins in a market-image matrix
+config['C'] = 30    # The number of channels in a market-image matrix
 
 # First '1' is a space for 'timestamp'
 # Last '2' is a spcae for [rec_wt, delta_wt]
