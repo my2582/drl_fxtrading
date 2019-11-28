@@ -3,12 +3,13 @@ import numpy as np
 from agents.features import draw_episode
 
 class Environment:
-    def __init__(self, X, config, num_agents=1):
+    def __init__(self, X, config, M=1, num_agents=1):
         '''
         Parameters:
             X(pd.DataFrame): one of X_train, X_val, or X_test
             config(dict): a dictionary of parameters
             num_agents(int): the total number of agents
+            M(int): the number of currency pairs.
         '''
         self.X = X
         self.ts = np.sort(self.X['timestamp'].unique()) # all timestamps
@@ -25,6 +26,7 @@ class Environment:
         # self.delta_wt = None
         self.state = None           # A tuple (observation, cur_wt). observation == a row of `feature_span`
         self.price_tuple = None    # A tuple (bid, ask, next_bid, next_ask)
+        self.M = M
 
 
     def get_features_within_epi(self, step_counter):
@@ -35,7 +37,7 @@ class Environment:
         return self.close[step_counter:], self.next_close[step_counter:], self.feature_span[step_counter]
 
 
-    def reset(self, epi_idx):
+    def reset(self, epi_idx=0):
         '''
         Parameters:
             epi_idx(int): an episode index
@@ -72,8 +74,12 @@ class Environment:
         # feature_span is a matrix of feature vectors (epi_sz, features size)
         # features is one feature vector (epi_sz, )
         features = self.feature_span[self.step_counter]  
-        rec_wt = 0.0
-        delta_wt = 0.0
+        
+        # An initia weight is always: cash 1.0, other currency pairs 0.0
+        rec_wt = np.zeros(shape=(self.M+1,))
+        delta_wt = np.zeros(shape=(self.M+1,))
+        rec_wt[0] = 1.0
+        
 
         # state = features + [rec_wt, delta_wt]
         self.state = (features, [rec_wt, delta_wt])

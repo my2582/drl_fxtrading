@@ -17,7 +17,7 @@ from tensorflow.keras import Model
 import logging 
 
 # User packages
-from agents.model import SimpleModel
+from agents.model import SimpleModel, DiscreteTradingModel
 from agents.agent import DQNAgent
 from environments.environment_old import Environment
 
@@ -57,9 +57,10 @@ assert config['total_no_epi']*config['split_sz'] <= np.min([X_train[key].shape[0
 # ccy_list = ['nzdusd', 'usdchf', 'gbpusd', 'usdnok', 'usdsek', 'audusd', 'eurusd', 'usdcad', 'usdjpy']
 ccy_list = ['usdjpy']
 result_path = './results/milestone/'
+action_set = [0, 1, 2]
 for ccy in ccy_list:
     config['target_currency'] = ccy
-    model = SimpleModel()
+    model = DiscreteTradingModel(action_set=action_set)
     env = Environment(X_train, config, num_agents=1)
     dqn_agent = DQNAgent(model, env, config, verbose=False)
     epi_rewards = dqn_agent.train()

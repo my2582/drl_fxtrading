@@ -37,6 +37,17 @@ class PortfolioManagement:
     
     def get_trading_quantity(self, cur_wt, target_wt, executed_price):
         return np.floor(self.get_pf_value()*(target_wt - cur_wt) * executed_price)
+
+    def get_target_weight(self, action):
+        if action == -1:
+            # short
+            return [2.0, -1.0]
+        elif action == 0:
+            # no trade
+            return self.wt[-1]
+        else:
+            # long
+            return [0.1, 1.0]
         
     def trade(self, cur_wt, target_wt, target_price, cost_bp = 10):
         '''
