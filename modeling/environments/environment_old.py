@@ -1,6 +1,6 @@
 import numpy as np 
 
-from features import draw_episode
+from agents.features import draw_episode
 
 class Environment:
     def __init__(self, X, config, num_agents=1):
@@ -32,9 +32,7 @@ class Environment:
         Parameters:
             step_counter(int): the current step index within an episode
         '''
-        return self.bid[step_counter:], self.ask[step_counter:], \
-                self.next_bid[step_counter:], self.next_ask[step_counter:], \
-                self.feature_span[step_counter]
+        return self.close[step_counter:], self.next_close[step_counter:], self.feature_span[step_counter]
 
 
     def reset(self, epi_idx):
@@ -54,7 +52,7 @@ class Environment:
         # Features are nomalized log returns with a 'lag'.
 
         # len(bid_prices) == epi_sz + 1
-        bid_prices, ask_prices, self.feature_span = \
+        close_prices, self.feature_span = \
             draw_episode(X=self.X, cur=self.config['target_currency'],
                         n=self.epi_idx, split_sz=self.config['split_sz'],
                         lag=self.config['lag'], ts=self.ts, ccy=self.ccy)
@@ -66,10 +64,8 @@ class Environment:
         #      self.next_bid <- [3,4,5]
         # Then we can have 'bid price' and 'next bid price' with the same index
         # , which is eaiser.
-        self.bid = bid_prices[:-1]
-        self.ask = ask_prices[:-1]
-        self.next_bid = bid_prices[1:]
-        self.next_ask = ask_prices[1:]
+        self.close = close_prices[:-1]
+        self.next_close = close_prices[1:]
 
         self.step_counter = 0
 
@@ -80,10 +76,10 @@ class Environment:
         delta_wt = 0.0
 
         # state = features + [rec_wt, delta_wt]
-        self.state = np.append(features, [rec_wt, delta_wt])
+        self.state = (features, [rec_wt, delta_wt])
 
         # All elements of this tuple has a shape of (epi_sz, )
-        self.price_tuple = (self.bid, self.ask, self.next_bid, self.next_ask)
+        self.price_tuple = (self.close, self.next_close)
 
         return self.step_counter, self.state, self.price_tuple, False
     
@@ -105,11 +101,11 @@ class Environment:
         # delta_wt will be used when an agent trades. 
         delta_wt = rec_wt - inv_wt
 
-        bid, ask, next_bid, next_ask, features = self.get_features_within_epi(self.step_counter)
+        close, next_close, features = self.get_features_within_epi(self.step_counter)
 
         # state = features + [rec_wt, delta_wt]
-        self.state = np.append(features, [rec_wt, delta_wt])
-        self.price_tuple = (bid, ask, next_bid, next_ask)
+        self.state = (features, [rec_wt, delta_wt])
+        self.price_tuple = (close, next_close)
 
         # We return t(=indix within an episode), state, price tuple, finish flag
         return self.step_counter, self.state, self.price_tuple, is_finished

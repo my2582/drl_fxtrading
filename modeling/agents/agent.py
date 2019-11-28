@@ -6,6 +6,8 @@ import tensorflow as tf
 import tensorflow.keras.optimizers as kop
 import tensorflow.keras.losses as kls
 
+from utils.portfolio import PortfolioManagement
+
 class Memory:
     def __init__(self, maxlen):
         self.buffer = deque(maxlen=maxlen)
@@ -15,7 +17,7 @@ class Memory:
         '''
         Appends a tuple of `experience` to the right side of self.buffer (deque)
         '''
-        expr_dict = dict(zip(keys, experience))
+        expr_dict = dict(zip(self.keys, experience))
         self.buffer.append(expr_dict)
     
     def sample(self, batch_size):
@@ -40,7 +42,7 @@ class Agent:
         self.decay_rate = decay_rate
         self.gamma = gamma
         self.memory_size = memory_size
-        self.memory = Memoery(maxlen = self.memory_size)
+        self.memory = Memory(maxlen = self.memory_size)
 
         if mode == 'train':
             self.mode = 'train'
@@ -52,14 +54,13 @@ class Agent:
             # self.num_batches = config['num_batches']
             # self.start_learning = config['start_learning']
 
-        self.action_set = action_set
         self.wealth = init_wealth
         self.state = None
         self.verbose = verbose
 
 class DQNAgent(Agent):
     def __init__(self, model, env, config, init_wealth = 10000, mode='train', verbose=False, test_model_path = None):
-        super(Agent, self).__init__(self, env, config, init_wealth = 10000, mode='train', verbose=False, test_model_path = None)
+        Agent.__init__(self, env, config, mode='train')
         self.model = model
         self.model.compile(
                 optimizer=kop.Adam(learning_rate=self.lr_rate),
@@ -69,7 +70,7 @@ class DQNAgent(Agent):
                 # metrics=['accuracy']
             )
 
-    def predict_action(self, explore_start, explore_stop, decay_rate, decay_step, state, cur_wt):
+    def predict_action(self, state, cur_wt, decay_step, explore_start = 1.0, explore_stop = 0.01, decay_rate = 0.00001):
         # We explore if `explore_prob` > `trade_off_prob`
         trade_off_prob = np.random.rand()
         explore_prob = self.explore_stop + (self.explore_start - self.explore_stop)*np.exp(-self.decay_rate*decay_step)
@@ -96,11 +97,31 @@ class DQNAgent(Agent):
             for epi_idx in range(self.config['total_no_epi']):
                 step = 0
                 episode_rewards = []
+                accum_rewards = []
+                accum_losses = []
+                action_history = []
+                obs_history = []
+                
+
                 
                 # Reset the environment whenever a new episode starts
                 t, state, price_tuple, is_finished = self.env.reset(epi_idx)
+
+                # We have observed and not taken any action yet.
+                obs = np.append(t, state[0])
+                obs_history.append(obs)
+
+                episode_rewards.append(0.)
+                accum_rewards.append(0.)
+
+                # `price` is FX rates for ONE currency pair (config['target_currency'])
                 price, next_price = price_tuple
-                pf = PortfolioManagement(init_price=price[0])
+                
+                # cash price is always 1. So the initial price vector is [1, price[0]].
+                price_vector = np.array([1, price[0]])
+
+                # M = 1 because our FX to trade is just one currency pair(the target currrency) at this moment
+                pf = PortfolioManagement(init_price=price_vector, M=1)
 
                 ### start of training ###
                 while step < self.max_steps:
@@ -108,14 +129,16 @@ class DQNAgent(Agent):
 
                     # Predict an action to take, take it and add it into a history list.
                     # The nueral networks are called during self.predict_action() being executed
-                    action = self.predict_action(state=state, cur_wt=pf.wt[-1])
+                    action, _ = self.predict_action(state=state, cur_wt=pf.wt[-1], decay_step=decay_step)
                     action_history.append(action)
 
                     # We observe next prices and we try to trade at those prices.
                     # However, executed prices will be different due to noise and transaction costs.
                     # In this trade() method, we do:
                     #   append self.wt, self.qty, self.price, self.rel_price into the corresponding lists.
-                    pf.trade(cur_wt=pf.wt[-1], target_wt=action, target_price=next_price)
+
+                    ## Check if next_price[0] is really the next price or next_price[1] is.
+                    pf.trade(cur_wt=pf.wt[-1], target_wt=action, target_price=next_price[0])
 
                     t, next_state, price_tuple, is_finished = self.env.step(action=action, inv_wt = pf.wt[-1])
                     
@@ -123,6 +146,10 @@ class DQNAgent(Agent):
 
                     # This immediate reward will be summed up as 'total reweards' later
                     episode_rewards.append(reward)
+                    accum_rewards.append(accum_rewards[-1] + reward)
+
+                    obs = np.append(t, next_state[0])
+                    obs_history.append(obs)
 
                     # finishing coditions:
                     #   ??? 
@@ -144,52 +171,54 @@ class DQNAgent(Agent):
 
                     
                     # We get tuples of (randomly chosen) experiences from memory to run a mini batch for a learning process. 
-                    batch_list = self.memory.sample(self.batch_sz)
 
-                    # Get a dictionary of the first experience
-                    expr_dict = batch_list[0]
+                    ####### Reply buffer begins... 
+                    # ### We should fill(=initialize) this 'memory' at least randomly...
+                    # batch_list = self.memory.sample(self.batch_sz)
 
-                    # Extract the first experience
-                    state = expr_dict['state']
-                    action = expr_dict['action']
-                    reward = expr_dict['reward']
-                    next_state = expr_dict['next_state']
-                    is_finished = expr_dict['is_finished']
+                    # # Get a dictionary of the first experience
+                    # expr_dict = batch_list[0]
 
-                    target_Q_batch = []
+                    # # Extract the first experience
+                    # state = expr_dict['state']
+                    # action = expr_dict['action']
+                    # reward = expr_dict['reward']
+                    # next_state = expr_dict['next_state']
+                    # is_finished = expr_dict['is_finished']
 
-                    # Get an action for the next state
-                    action = self.model(next_state)
+                    # target_Q_batch = []
 
-                    for expr_dict in batch_list:
-                        if is_finished:
-                            target_Q_batch.append(reward)
-                        state = expr_dict['state']
-                        action = expr_dict['action']
-                        reward = expr_dict['reward']
-                        next_state = expr_dict['next_state']
-                        is_finished = expr_dict['is_finished']
+                    # # Get an action for the next state
+                    # action = self.model(next_state)
+
+                    # for expr_dict in batch_list:
+                    #     if is_finished:
+                    #         target_Q_batch.append(reward)
+                    #     state = expr_dict['state']
+                    #     action = expr_dict['action']
+                    #     reward = expr_dict['reward']
+                    #     next_state = expr_dict['next_state']
+                    #     is_finished = expr_dict['is_finished']
+                    ####### Reply buffer ends...
                         
-
-
-
-                    
 
                     if t % 100 == 0:
                         if self.verbose:
                             print('Time {}. Action(rec_wt) is {}. Reward is {}. Bid price goes from {} to {}'.format(t, action, episode_rewards[t], cur_bid[t-1], next_bid[0]))
 
                 ### end of all batches ###
-                losses = self.model.train_on_batch(obs_history, episode_rewards)
-                accum_losses[epi_idx] = losses
+                losses = self.model.train_on_batch(np.array(obs_history), np.array(episode_rewards))
+                accum_losses.append(losses)
 
-                print('Epoch:{} Episode:{}. The training loss is {}. The DRL total reward is {} vs A baseline total reward is {}. DRL - Baseline = {}'.format(epoch+1, epi_idx+1, losses, accum_rewards[t], mean_rev_accum_rewards[t], accum_rewards[t] - mean_rev_accum_rewards[t]))
+                print('Epoch:{} Episode:{}. The training loss is {}. The total losses are {}'.format(epoch+1, epi_idx+1, losses, np.sum(accum_losses)))
             
             ### enf of one epoch ##
             epochs_rewards.append(accum_rewards[-1])
         
-        return accum_rewards, mean_rev_accum_rewards, accum_losses
+        return accum_rewards
 
+    def _compute_loss(self, obs_history, immed_rewards):
+        return -tf.reduce_sum(immed_rewards)
 
 
 class SimpleDRLAgent(Agent):
