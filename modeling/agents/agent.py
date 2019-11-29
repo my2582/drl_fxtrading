@@ -122,11 +122,7 @@ class DQNAgent(Agent):
         trade_off_prob = np.random.rand()
         explore_prob = self.explore_stop + (self.explore_start - self.explore_stop)*np.exp(-self.decay_rate*decay_step)
 
-        ########## should be back to the folloing line. Just for testing now.########
-        # if explore_prob > trade_off_prob:
-        #############################################################################
-        if explore_prob > 1:
-
+        if explore_prob > trade_off_prob:
             # We take a random action (exploration)
             choice = np.random.randint(0, len(self.q_net.action_set))
             action = self.q_net.action_set[choice]
