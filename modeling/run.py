@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 config = {}
 config['lag'] = 10
-config['epi_sz'] = 100
+config['epi_sz'] = 32
 config['split_sz'] = config['epi_sz'] + config['lag']
 config['total_no_epi'] = 50  # floor(91057/1460), 91057 == # rows of any currency.
 config['lr_rate'] = 0.001
@@ -36,32 +36,27 @@ config['epochs'] = 1
 config['bins'] = np.concatenate([[-10], np.arange(-1e-4, 1.1e-4, 1e-5), [10]])
 config['channels'] = 30
 config['buffer_sz'] = 50000
-config['batch_sz'] = 64
+config['batch_sz'] = 16
 assert config['epi_sz'] > config['batch_sz']
-config['num_batches'] = 100
-config['start_learning'] = 5000
+config['num_batches'] = 10
+# config['start_learning'] = 5000
 config['action_set'] = [-1, 0, 1]
 config['M'] = 1     # The number of the target currency pairs to invest in.
-config['N'] = 23    # The number of bins in a market-image matrix
-config['C'] = 30    # The number of channels in a market-image matrix
-
-# First '1' is a space for 'timestamp'
-# Last '2' is a spcae for [rec_wt, delta_wt]
+# config['N'] = 23    # The number of bins in a market-image matrix
+# config['C'] = 30    # The number of channels in a market-image matrix
 config['obs_sz'] = 183
-# tf.keras.backend.set_floatx('float32')
 
 X_train = pd.read_csv('../dataset/toy_X_train_close.csv', sep=',')
 X_val = pd.read_csv('../dataset/toy_X_val_close.csv', sep=',')
 assert config['total_no_epi']*config['split_sz'] <= np.min([X_train[key].shape[0] for key in X_train.keys()]), "Training set has less data points than # of episodes * # of splits."
 
 
-# ccy_list = ['nzdusd', 'usdchf', 'gbpusd', 'usdnok', 'usdsek', 'audusd', 'eurusd', 'usdcad', 'usdjpy']
 ccy_list = ['usdjpy']
 result_path = './results/milestone/'
 for ccy in ccy_list:
     config['target_currency'] = ccy
     env = Environment(X_train, config, num_agents=1)
-    dqn_agent = DQNAgent(env, config, verbose=False)
+    dqn_agent = DQNAgent(env, config, verbose=True)
     epi_rewards = dqn_agent.train()
     # drl_model = pd.DataFrame(epi_rewards)
     # drl_model.to_csv(result_path+'train_drl_'+ccy+'.csv', index=False, index_label=False, header=False)
