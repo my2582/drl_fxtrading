@@ -277,9 +277,6 @@ class DQNAgent(Agent):
         
         return accum_rewards
 
-    def _compute_loss(self, state_history, immed_rewards):
-        return -tf.reduce_sum(immed_rewards)
-
 
 class SimpleDRLAgent(Agent):
     def __init__(self, model, env, config, init_wealth = 10000, mode='train', verbose=False, test_model_path = None):
