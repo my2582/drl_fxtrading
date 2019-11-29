@@ -75,21 +75,14 @@ class Environment:
         # features is one feature vector (epi_sz, )
         features = self.feature_span[self.step_counter]  
         
-        # An initia weight is always: cash 1.0, other currency pairs 0.0
-        rec_wt = np.zeros(shape=(self.M+1,))
-        delta_wt = np.zeros(shape=(self.M+1,))
-        rec_wt[0] = 1.0
-        
-
-        # state = features + [rec_wt, delta_wt]
-        self.state = (features, [rec_wt, delta_wt])
+        # self.state = features
 
         # All elements of this tuple has a shape of (epi_sz, )
         self.price_tuple = (self.close, self.next_close)
 
-        return self.step_counter, self.state, self.price_tuple, False
+        return self.step_counter, features, self.price_tuple, False
     
-    def step(self, action, inv_wt):
+    def step(self, action):
         '''
         Parameters:
             action(float): a recommended investment weight in the target currency.
@@ -102,16 +95,10 @@ class Environment:
         # `is_finished` is true if it arrives at the end of the current episode.
         is_finished = (self.step_counter+1 == self.config['epi_sz'])
         
-        rec_wt = action     # We take `action` as a recommended investment weight in the target currency.
-
-        # delta_wt will be used when an agent trades. 
-        delta_wt = rec_wt - inv_wt
-
         close, next_close, features = self.get_features_within_epi(self.step_counter)
 
-        # state = features + [rec_wt, delta_wt]
-        self.state = (features, [rec_wt, delta_wt])
+        # self.state = features
         self.price_tuple = (close, next_close)
 
         # We return t(=indix within an episode), state, price tuple, finish flag
-        return self.step_counter, self.state, self.price_tuple, is_finished
+        return self.step_counter, features, self.price_tuple, is_finished

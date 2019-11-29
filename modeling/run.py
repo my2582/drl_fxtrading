@@ -17,7 +17,6 @@ from tensorflow.keras import Model
 import logging 
 
 # User packages
-from agents.model import SimpleModel, DiscreteTradingModel
 from agents.agent import DQNAgent
 from environments.environment_old import Environment
 
@@ -38,9 +37,11 @@ config['bins'] = np.concatenate([[-10], np.arange(-1e-4, 1.1e-4, 1e-5), [10]])
 config['channels'] = 30
 config['buffer_sz'] = 50000
 config['batch_sz'] = 64
+assert config['epi_sz'] > config['batch_sz']
 config['num_batches'] = 100
 config['start_learning'] = 5000
-config['M'] = 9     # The number of currency pairs to invest in.
+config['action_set'] = [-1, 0, 1]
+config['M'] = 1     # The number of the target currency pairs to invest in.
 config['N'] = 23    # The number of bins in a market-image matrix
 config['C'] = 30    # The number of channels in a market-image matrix
 
@@ -57,12 +58,10 @@ assert config['total_no_epi']*config['split_sz'] <= np.min([X_train[key].shape[0
 # ccy_list = ['nzdusd', 'usdchf', 'gbpusd', 'usdnok', 'usdsek', 'audusd', 'eurusd', 'usdcad', 'usdjpy']
 ccy_list = ['usdjpy']
 result_path = './results/milestone/'
-action_set = [0, 1, 2]
 for ccy in ccy_list:
     config['target_currency'] = ccy
-    model = DiscreteTradingModel(action_set=action_set)
     env = Environment(X_train, config, num_agents=1)
-    dqn_agent = DQNAgent(model, env, config, verbose=False)
+    dqn_agent = DQNAgent(env, config, verbose=False)
     epi_rewards = dqn_agent.train()
     # drl_model = pd.DataFrame(epi_rewards)
     # drl_model.to_csv(result_path+'train_drl_'+ccy+'.csv', index=False, index_label=False, header=False)

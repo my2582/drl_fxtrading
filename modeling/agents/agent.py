@@ -6,13 +6,17 @@ import tensorflow as tf
 import tensorflow.keras.optimizers as kop
 import tensorflow.keras.losses as kls
 
+from agents.model import SimpleModel, DiscreteTradingModel
+
 from utils.portfolio import PortfolioManagement
 
 class Memory:
-    def __init__(self, init_size, maxlen):
+    def __init__(self, init_size, maxlen, env, action_set):
         self.init_size = init_size
         self.buffer = deque(maxlen=maxlen)
         self.keys = ('state', 'action', 'reward', 'next_state', 'is_finished')
+        self.env = env
+        self.action_set = action_set
         self._randomly_fill()
 
     def _randomly_fill(self):
@@ -20,9 +24,40 @@ class Memory:
         Randomly generates experience (state, action, reward, next_state, is_finished)
           - experience size is set to be config['batch_sz']
         '''
-        t, state_tuple, price_tuple, is_finished = self.env.reset()
 
 
+        for i in range(self.env.config['batch_sz']):
+            if i == 0:
+                rand_epi_idx = np.random.randint(self.env.config['total_no_epi'])
+                t, obs, price_tuple, is_finished = self.env.reset(rand_epi_idx)
+                state = np.append(t, obs)
+                price, next_price = price_tuple
+                price_vector = np.array([1, price[0]])
+                temp_pf = PortfolioManagement(init_price=price_vector, M=1)
+
+            # We take a random action (exploration)
+            choice = np.random.randint(0, len(self.env.config['action_set']))
+            action = self.action_set[choice]
+
+            target_wt = temp_pf.get_target_weight(action)
+
+            _, next_price = price_tuple
+
+            # Do this trade
+            temp_pf.trade(cur_wt=temp_pf.wt[-1], target_wt=target_wt, target_price=next_price[0])
+            reward = temp_pf.get_pf_value(-1) - temp_pf.get_pf_value(-2)   # getting a reward function will be implemented within self.env.step() later.
+            
+            t, next_obs, price_tuple, is_finished = self.env.step(action=action)
+            next_state = np.append(t, next_obs)
+            self.add((state, action, reward, next_state, is_finished))
+
+            # move to the next state
+            if is_finished:
+                rand_epi_idx = np.random.randint(self.env.config['total_no_epi'])
+                t, obs, price_tuple, is_finished = self.env.reset(rand_epi_idx)
+                state = np.append(t, obs)
+            else:
+                state = next_state
     
     def add(self, experience):
         '''
@@ -43,8 +78,7 @@ class Memory:
 class Agent:
     def __init__(self, env, config, mode='train', init_wealth = 10000, verbose=False,
                  explore_start = 1.0, explore_stop = 0.01, decay_rate = 0.00001,
-                 gamma = 0.9, memory_size=10**6,
-                 test_model_path = None, max_steps=10000):
+                 gamma = 0.9, test_model_path = None, max_steps=10000):
         self.config = config
         self.env = env
         self.max_steps = max_steps
@@ -52,8 +86,6 @@ class Agent:
         self.explore_stop = explore_stop
         self.decay_rate = decay_rate
         self.gamma = gamma
-        self.memory_size = memory_size
-        self.memory = Memory(init_size = config['batch_sz'], maxlen = memory_size)
 
         if mode == 'train':
             self.mode = 'train'
@@ -70,35 +102,43 @@ class Agent:
         self.verbose = verbose
 
 class DQNAgent(Agent):
-    def __init__(self, model, env, config, init_wealth = 10000, mode='train', verbose=False, test_model_path = None):
+    def __init__(self, env, config, init_wealth = 10000, mode='train', verbose=False, memory_size=10**4, test_model_path = None):
         Agent.__init__(self, env, config, mode='train')
-        self.model = model
-        self.model.compile(
+        action_set = config['action_set']
+        self.memory_size = memory_size
+        self.memory = Memory(init_size = config['batch_sz'], maxlen = memory_size, env=env, action_set=action_set)
+        self.q_net = DiscreteTradingModel(action_set=action_set)
+        self.q_net.compile(
                 optimizer=kop.Adam(learning_rate=self.lr_rate),
                 # deifne a loss function
-                # loss = 'mean_absolute_error'
-                loss=[self._compute_loss],
+                loss = 'mean_absolute_error'
+                # loss=[self._compute_loss],
                 # metrics=['accuracy']
             )
+        self.target_net = DiscreteTradingModel(action_set=config['action_set'])
 
     def predict_action(self, state, decay_step, explore_start = 1.0, explore_stop = 0.01, decay_rate = 0.00001):
         # We explore if `explore_prob` > `trade_off_prob`
         trade_off_prob = np.random.rand()
         explore_prob = self.explore_stop + (self.explore_start - self.explore_stop)*np.exp(-self.decay_rate*decay_step)
 
-        if explore_prob > trade_off_prob:
+        ########## should be back to the folloing line. Just for testing now.########
+        # if explore_prob > trade_off_prob:
+        #############################################################################
+        if explore_prob > 1:
+
             # We take a random action (exploration)
-            choice = np.random.randint(0, len(self.model.action_set)+1)
-            action = self.model.action_set[choice]
+            choice = np.random.randint(0, len(self.q_net.action_set))
+            action = self.q_net.action_set[choice]
         else:
             # Get an estimate of Q values for each possible action
-            Qs = self.model(state)
+            Qs = self.q_net(state)
 
             # Get an argument that maximizes the Q values.
-            choice = tf.argmax(Qs)
+            choice = np.argmax(Qs)
 
             # Take the best action 
-            action = self.model.action_set[choice]
+            action = self.q_net.action_set[choice]
 
         return action, explore_prob
     
@@ -122,13 +162,13 @@ class DQNAgent(Agent):
                 
                 
                 # Reset the environment whenever a new episode starts
-                t, state_tuple, price_tuple, is_finished = self.env.reset(epi_idx)
+                t, obs, price_tuple, is_finished = self.env.reset(epi_idx)
 
-                # We have returned step counter t, features(=state[0]) and [rec_wt, delta_wt](=state[1]) from the environment.
+                # We have returned step counter t, state(=feature) from the environment.
                 # No action is taken yet.
-                state = np.append(t, state[0])
-                state = np.append(state, state[1])
+                state = np.append(t, obs)
                 state_history.append(state)
+                action = 0  # initialize an action to be no tprice_vectorrade
 
                 episode_rewards.append(0.)
                 accum_rewards.append(0.)
@@ -154,15 +194,17 @@ class DQNAgent(Agent):
                     action_history.append(action)
 
                     # We observe next prices and we try to trade at those prices.
-                    # However, executed prices will be different due to noise and transaction costs.
-                    # In this trade() method, we do:
+                    # However, executed prices might be different due to noise and transaction costs (will be implemented later if time permits)
+                    # In this pf.trade() method, we do:
                     #   append self.wt, self.qty, self.price, self.rel_price into the corresponding lists.
 
+                    # Get a target weight for trading
                     target_wt = pf.get_target_weight(action)
 
+                    # Do this trade
                     pf.trade(cur_wt=pf.wt[-1], target_wt=target_wt, target_price=next_price[0])
 
-                    t, next_state, price_tuple, is_finished = self.env.step(action=action, inv_wt = pf.wt[-1])
+                    t, next_obs, price_tuple, is_finished = self.env.step(action=action)
                     
                     reward = pf.get_pf_value(-1) - pf.get_pf_value(-2)   # getting a reward function will be implemented within self.env.step() later.
 
@@ -170,8 +212,8 @@ class DQNAgent(Agent):
                     episode_rewards.append(reward)
                     accum_rewards.append(accum_rewards[-1] + reward)
 
-                    obs = np.append(t, next_state[0])
-                    state_history.append(obs)
+                    next_state = np.append(t, next_obs)
+                    state_history.append(next_state)
 
                     # finishing coditions:
                     #   ??? 
@@ -195,44 +237,40 @@ class DQNAgent(Agent):
                     # We get tuples of (randomly chosen) experiences from memory to run a mini batch for a learning process. 
 
                     ####### Reply buffer begins... 
-                    # ### We should fill(=initialize) this 'memory' at least randomly...
-                    # batch_list = self.memory.sample(self.batch_sz)
+                    ### We should fill(=initialize) this 'memory' at least randomly...
 
-                    # # Get a dictionary of the first experience
-                    # expr_dict = batch_list[0]
+                    # Obtain a random mini-batch list from our memory buffer.
+                    # batch_list = [experience dictionary #1, #2, ..., #batch_sz]
+                    batch_list = self.memory.sample(self.batch_sz)
 
-                    # # Extract the first experience
-                    # state = expr_dict['state']
-                    # action = expr_dict['action']
-                    # reward = expr_dict['reward']
-                    # next_state = expr_dict['next_state']
-                    # is_finished = expr_dict['is_finished']
+                    # Get a list of states, a list of actions, ... from all experiences in this mini-batch("mb")
+                    states_mb = np.array([expr_dict['state'] for expr_dict in batch_list])
+                    actions_mb = np.array([expr_dict['action'] for expr_dict in batch_list])
+                    rewards_mb = np.array([expr_dict['reward'] for expr_dict in batch_list])
+                    next_states_mb = np.array([expr_dict['next_state'] for expr_dict in batch_list])
+                    is_finished_mb = np.array([expr_dict['is_finished'] for expr_dict in batch_list])
 
-                    # target_Q_batch = []
+                    target_Qs_batch = []
 
-                    # # Get an action for the next state
-                    # action = self.model(next_state)
+                    # Get a batch_sz-length list of Q values in this batch.
+                    Qs_at_next_state = [self.target_net(next_state) for next_state in next_states_mb]
 
-                    # for expr_dict in batch_list:
-                    #     if is_finished:
-                    #         target_Q_batch.append(reward)
-                    #     state = expr_dict['state']
-                    #     action = expr_dict['action']
-                    #     reward = expr_dict['reward']
-                    #     next_state = expr_dict['next_state']
-                    #     is_finished = expr_dict['is_finished']
+                    for i in range(self.config['batch_sz']):
+                        is_finished = is_finished_mb[i]
+                        if is_finished:
+                            target_Qs_batch.append(rewards_mb[i])
+                        else:
+                            target = rewards_mb[i] + self.gamma*np.max(Qs_at_next_state[i])
+                            target_Qs_batch.append(target)
+
+                    targets_mb = np.array(target_Qs_batch)
                     ####### Reply buffer ends...
                         
+                    ### end of all batches ###
+                    losses = self.q_net.train_on_batch(states_mb, targets_mb)
+                    accum_losses.append(losses)
 
-                    if t % 100 == 0:
-                        if self.verbose:
-                            print('Time {}. Action(rec_wt) is {}. Reward is {}. Bid price goes from {} to {}'.format(t, action, episode_rewards[t], cur_bid[t-1], next_bid[0]))
-
-                ### end of all batches ###
-                losses = self.model.train_on_batch(np.array(state_history), np.array(episode_rewards))
-                accum_losses.append(losses)
-
-                print('Epoch:{} Episode:{}. The training loss is {}. The total losses are {}'.format(epoch+1, epi_idx+1, losses, np.sum(accum_losses)))
+                    print('Epoch:{} Episode:{} Step:{}. The training loss is {}. The accumulative loss is {}'.format(epoch+1, epi_idx+1, step, losses, np.sum(accum_losses)))
             
             ### enf of one epoch ##
             epochs_rewards.append(accum_rewards[-1])

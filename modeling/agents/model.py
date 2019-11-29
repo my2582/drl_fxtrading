@@ -33,16 +33,18 @@ class DiscreteTradingModel(Model):
     def __init__(self, action_set):
         super(DiscreteTradingModel, self).__init__('discrete_trading_net')
         # action_set = [-1,0,1]
-        # -1 is sell
+        # -1 is short
         # 0 is neutral (no trade)
-        # 1 is buy
+        # 1 is long
         self.action_set = action_set
-        self.fc1 = Dense(units=256, activation='relu')
-        self.batchnorm = BatchNormalization()
+        self.fc1 = Dense(units=128, activation='relu')
+        self.batchnorm1 = BatchNormalization()
         self.dropout1 = Dropout(0.2)
-        self.fc2 = Dense(units=128, activation='relu')
+        self.fc2 = Dense(units=64, activation='relu')
+        self.batchnorm2 = BatchNormalization()
         self.dropout2 = Dropout(0.3)
-        self.fc3 = Dense(units=64, activation='relu')
+        self.fc3 = Dense(units=32, activation='relu')
+        self.batchnorm3 = BatchNormalization()
         self.dropout3 = Dropout(0.4)
         self.Q = Dense(units=len(self.action_set), activation='softmax', name='Q')
         
@@ -58,13 +60,13 @@ class DiscreteTradingModel(Model):
         x = tf.expand_dims(x, 0)
         
         x = self.fc1(x)
-        x = self.batchnorm(x)
+        # x = self.batchnorm1(x)
         x = self.dropout1(x)
         x = self.fc2(x)
-        x = self.batchnorm(x)
+        # x = self.batchnorm2(x)
         x = self.dropout2(x)
         x = self.fc3(x)
-        x = self.batchnorm(x)
+        # x = self.batchnorm3(x)
         x = self.dropout3(x)
         x = self.Q(x)
         
