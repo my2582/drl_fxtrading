@@ -114,7 +114,7 @@ class DQNAgent(Agent):
         self.q_net.compile(
                 optimizer=kop.Adam(learning_rate=self.lr_rate),
                 # deifne a loss function
-                loss = 'mean_absolute_error'
+                loss = 'mean_squared_error'
                 # loss=self._compute_loss(),
                 # metrics=['accuracy']
             )
