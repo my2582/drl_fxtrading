@@ -44,8 +44,6 @@ class DiscreteTradingModel(Model):
         self.batchnorm2 = BatchNormalization()
         self.dropout2 = Dropout(0.3)
         self.fc3 = Dense(units=32, activation='relu')
-        self.batchnorm3 = BatchNormalization()
-        self.dropout3 = Dropout(0.4)
         self.Q = Dense(units=len(self.action_set), name='Q')
         
         self.saved_log_probs = []
