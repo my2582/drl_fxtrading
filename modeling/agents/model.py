@@ -45,7 +45,6 @@ class DiscreteTradingModel(Model):
         self.dropout2 = Dropout(0.3)
         self.fc3 = Dense(units=32, activation='relu')
         self.Q = Dense(units=len(self.action_set), name='Q')
-        
         self.saved_log_probs = []
         self.rewards = 0
         
@@ -58,14 +57,12 @@ class DiscreteTradingModel(Model):
         x = tf.expand_dims(x, 0)
         
         x = self.fc1(x)
-        # x = self.batchnorm1(x)
+        x = self.batchnorm1(x)
         x = self.dropout1(x)
         x = self.fc2(x)
-        # x = self.batchnorm2(x)
+        x = self.batchnorm2(x)
         x = self.dropout2(x)
         x = self.fc3(x)
-        # x = self.batchnorm3(x)
-        x = self.dropout3(x)
         x = self.Q(x)
         
         return x
