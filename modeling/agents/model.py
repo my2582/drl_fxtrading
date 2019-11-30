@@ -37,7 +37,7 @@ class DiscreteTradingModel(Model):
         # 0 is neutral (no trade)
         # 1 is long
         self.action_set = action_set
-        self.fc1 = Dense(units=128, activation='relu')
+        self.fc1 = Dense(units=128, activation='relu', input_shape=(91,))
         self.batchnorm1 = BatchNormalization()
         self.dropout1 = Dropout(0.2)
         self.fc2 = Dense(units=64, activation='relu')
@@ -46,7 +46,7 @@ class DiscreteTradingModel(Model):
         self.fc3 = Dense(units=32, activation='relu')
         self.batchnorm3 = BatchNormalization()
         self.dropout3 = Dropout(0.4)
-        self.Q = Dense(units=len(self.action_set), activation='softmax', name='Q')
+        self.Q = Dense(units=len(self.action_set), name='Q')
         
         self.saved_log_probs = []
         self.rewards = 0

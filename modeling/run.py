@@ -26,19 +26,33 @@ logger = logging.getLogger(__name__)
 
 
 config = {}
+## setting for a toy dataset
+# config['lag'] = 5
+# config['epochs'] = 10
+# config['epi_sz'] = 16   # epi_sz is equal to the number of possible time steps in one epidoe.
+# config['total_no_epi'] = 20  # floor(91057/1460), 91057 == # rows of any currency.
+# config['num_batches'] = 5
+# config['batch_sz'] = 8
+#######################
+## setting for a real dataset
 config['lag'] = 10
-config['epi_sz'] = 32
+config['epochs'] = 20
+config['epi_sz'] = 30   # epi_sz is equal to the number of possible time steps in one epidoe.
+config['total_no_epi'] = 30  # floor(91057/1460), 91057 == # rows of any currency.
+config['num_batches'] = 10
+config['batch_sz'] = 16
+#######################
+config['state_sz'] = 1 + 9*config['lag']   # state = [time step, 9*lag log returns]
 config['split_sz'] = config['epi_sz'] + config['lag']
-config['total_no_epi'] = 50  # floor(91057/1460), 91057 == # rows of any currency.
 config['lr_rate'] = 0.001
 config['momentum'] = 0.9
-config['epochs'] = 1
+
 config['bins'] = np.concatenate([[-10], np.arange(-1e-4, 1.1e-4, 1e-5), [10]])
 config['channels'] = 30
 config['buffer_sz'] = 50000
-config['batch_sz'] = 16
+
 assert config['epi_sz'] > config['batch_sz']
-config['num_batches'] = 10
+
 # config['start_learning'] = 5000
 config['action_set'] = [-1, 0, 1]
 config['M'] = 1     # The number of the target currency pairs to invest in.
@@ -50,8 +64,8 @@ X_train = pd.read_csv('../dataset/toy_X_train_close.csv', sep=',')
 X_val = pd.read_csv('../dataset/toy_X_val_close.csv', sep=',')
 assert config['total_no_epi']*config['split_sz'] <= np.min([X_train[key].shape[0] for key in X_train.keys()]), "Training set has less data points than # of episodes * # of splits."
 
-
-ccy_list = ['usdjpy']
+# ccy_list = ['gbpusd', 'eurusd', 'chfusd', 'nokusd', 'sekusd', 'cadusd', 'audusd', 'nzdusd', 'jpyusd']
+ccy_list = ['eurusd']
 result_path = './results/milestone/'
 for ccy in ccy_list:
     config['target_currency'] = ccy
@@ -61,6 +75,7 @@ for ccy in ccy_list:
     # drl_model = pd.DataFrame(epi_rewards)
     # drl_model.to_csv(result_path+'train_drl_'+ccy+'.csv', index=False, index_label=False, header=False)
     print('epi_rewards:', epi_rewards)
+
 
     # config['target_currency'] = ccy
     # model = SimpleModel()

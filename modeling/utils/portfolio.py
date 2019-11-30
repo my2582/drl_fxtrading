@@ -20,6 +20,9 @@ class PortfolioManagement:
         self.transaction_costs = 0
         self.init_wealth = init_wealth
 
+    def get_pf_value_history(self):
+        return [self.get_pf_value(i) for i in range(self.qty.shape[0])]
+
     def get_pf_value(self, idx=-1):
         # an initial condition handling.
         if self.price.shape[0] < abs(idx):
@@ -47,7 +50,7 @@ class PortfolioManagement:
             return self.wt[-1]
         else:
             # long
-            return [0.1, 1.0]
+            return [0.0, 1.0]
         
     def trade(self, cur_wt, target_wt, target_price, cost_bp = 10):
         '''
