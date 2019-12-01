@@ -30,7 +30,7 @@ class PortfolioManagement:
         
         qty = self.qty[idx]
         price = self.price[idx]
-        return np.sum([qty[i]/price[i] for i in range(qty.shape[0])])
+        return np.sum([qty[i]*price[i] for i in range(qty.shape[0])])
 
     def get_noise_price(self, trade_price):
         # With scale = (3*10)**-2,
@@ -39,7 +39,7 @@ class PortfolioManagement:
         return trade_price*noise
     
     def get_trading_quantity(self, cur_wt, target_wt, executed_price):
-        return np.floor(self.get_pf_value()*(target_wt - cur_wt) * executed_price)
+        return np.floor(self.get_pf_value()*(target_wt - cur_wt) / executed_price)
 
     def get_target_weight(self, action):
         if action == -1:
@@ -79,7 +79,7 @@ class PortfolioManagement:
         new_qty = self.qty[-1] + trading_qty
         self.add_qty(new_qty=new_qty)
 
-        new_wt = (new_qty/target_price_vector) / self.get_pf_value()
+        new_wt = (new_qty*target_price_vector) / self.get_pf_value()
         self.add_wt(new_wt=new_wt)
         self.add_rel_price(price=target_price)
     

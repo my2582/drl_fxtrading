@@ -96,3 +96,6 @@ dataset/
 
 # Visual studio
 .vscode/
+
+# results
+results/

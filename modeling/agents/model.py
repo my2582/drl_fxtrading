@@ -37,7 +37,7 @@ class DiscreteTradingModel(Model):
         # 0 is neutral (no trade)
         # 1 is long
         self.action_set = action_set
-        self.fc1 = Dense(units=128, activation='relu', input_shape=(91,))
+        self.fc1 = Dense(units=128, activation='relu')
         self.batchnorm1 = BatchNormalization()
         self.dropout1 = Dropout(0.2)
         self.fc2 = Dense(units=64, activation='relu')
@@ -57,10 +57,10 @@ class DiscreteTradingModel(Model):
         x = tf.expand_dims(x, 0)
         
         x = self.fc1(x)
-        x = self.batchnorm1(x)
+        # x = self.batchnorm1(x)
         x = self.dropout1(x)
         x = self.fc2(x)
-        x = self.batchnorm2(x)
+        # x = self.batchnorm2(x)
         x = self.dropout2(x)
         x = self.fc3(x)
         x = self.Q(x)

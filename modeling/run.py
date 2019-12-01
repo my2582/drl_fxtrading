@@ -19,6 +19,7 @@ import logging
 # User packages
 from agents.agent import DQNAgent
 from environments.environment_old import Environment
+import utils.plot
 
 
 logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.INFO)
@@ -27,22 +28,22 @@ logger = logging.getLogger(__name__)
 
 config = {}
 ## setting for a toy dataset
-# config['lag'] = 5
-# config['epochs'] = 10
-# config['epi_sz'] = 16   # epi_sz is equal to the number of possible time steps in one epidoe.
-# config['total_no_epi'] = 20  # floor(91057/1460), 91057 == # rows of any currency.
-# config['num_batches'] = 5
-# config['batch_sz'] = 8
+config['lag'] = 5
+config['epochs'] = 10
+config['epi_sz'] = 20   # epi_sz is equal to the number of possible time steps in one epidoe.
+config['total_no_epi'] = 30  # floor(91057/1460), 91057 == # rows of any currency.
+config['num_batches'] = 5
+config['batch_sz'] = 8
 #######################
 ## setting for a real dataset
-config['lag'] = 10
-config['epochs'] = 20
-config['epi_sz'] = 30   # epi_sz is equal to the number of possible time steps in one epidoe.
-config['total_no_epi'] = 30  # floor(91057/1460), 91057 == # rows of any currency.
-config['num_batches'] = 10
-config['batch_sz'] = 16
+# config['lag'] = 5
+# config['epochs'] = 30
+# config['epi_sz'] = 20   # epi_sz is equal to the number of possible time steps in one epidoe.
+# config['total_no_epi'] = 30  # floor(91057/1460), 91057 == # rows of any currency.
+# config['num_batches'] = 10
+# config['batch_sz'] = 16
 #######################
-config['state_sz'] = 1 + 9*config['lag']   # state = [time step, 9*lag log returns]
+config['state_sz'] = 9*config['lag']   # state = [time step, 9*lag log returns]
 config['split_sz'] = config['epi_sz'] + config['lag']
 config['lr_rate'] = 0.001
 config['momentum'] = 0.9
@@ -60,21 +61,72 @@ config['M'] = 1     # The number of the target currency pairs to invest in.
 # config['C'] = 30    # The number of channels in a market-image matrix
 config['obs_sz'] = 183
 
-X_train = pd.read_csv('../dataset/toy_X_train_close.csv', sep=',')
-X_val = pd.read_csv('../dataset/toy_X_val_close.csv', sep=',')
+X_train = pd.read_csv('../dataset/X_train.csv', sep=',')
+X_test = pd.read_csv('../dataset/X_test.csv', sep=',')
 assert config['total_no_epi']*config['split_sz'] <= np.min([X_train[key].shape[0] for key in X_train.keys()]), "Training set has less data points than # of episodes * # of splits."
 
-# ccy_list = ['gbpusd', 'eurusd', 'chfusd', 'nokusd', 'sekusd', 'cadusd', 'audusd', 'nzdusd', 'jpyusd']
-ccy_list = ['eurusd']
-result_path = './results/milestone/'
+tf.keras.backend.set_floatx('float32')
+
+ccy_list = ['gbpusd', 'eurusd', 'chfusd', 'nokusd', 'sekusd', 'cadusd', 'audusd', 'nzdusd', 'jpyusd']
+# ccy_list = ['gbpusd']
+result_path = {
+    'gbpusd': '../results/final/gbpusd/',
+    'eurusd': '../results/final/eurusd/',
+    'chfusd': '../results/final/chfusd/',
+    'nokusd': '../results/final/nokusd/',
+    'sekusd': '../results/final/sekusd/',
+    'cadusd': '../results/final/cadusd/',
+    'audusd': '../results/final/audusd/',
+    'nzdusd': '../results/final/nzdusd/',
+    'jpyusd': '../results/final/jpyusd/'
+} 
+
+hyper_params = {
+    # 'gamma': [0.9, 0.7, 0.5],
+    # 'lr_rate': [0.001, 0.05, 0.01],
+    # 'decay_rate': [0.01, 0.005, 0.001]
+    'gamma': [0.9],
+    'lr_rate': [0.001],
+    'decay_rate': [0.01]
+}
+
+def save_results(epoch, mode, ccy, model, results_dict, config):
+    gamma = config['gamma']
+    lr_rate = config['lr_rate']
+    decay_rate = config['decay_rate']
+    param_name = 'g'+str(gamma)+'lr'+str(lr_rate)+'dr'+str(decay_rate)
+    epoch = str(epoch).zfill(2)
+
+    folder_name_q_net = result_path[ccy]+epoch+mode+'_'+ccy+'_q_net_'+param_name+'.tf'
+    # folder_name_target_net = result_path[ccy]+mode+'_'+str(epoch)+ccy+'_target_net_'+param_name+'.tf'
+    model.q_net.save(folder_name_q_net, save_format="tf")
+    # model.target_net.save(folder_name_target_net, save_format="tf")
+    
+    for key in results_dict.keys():
+        x = results_dict[key]
+        np.save(folder_name_q_net+'/'+key, x)
+
 for ccy in ccy_list:
     config['target_currency'] = ccy
-    env = Environment(X_train, config, num_agents=1)
-    dqn_agent = DQNAgent(env, config, verbose=True)
-    epi_rewards = dqn_agent.train()
-    # drl_model = pd.DataFrame(epi_rewards)
-    # drl_model.to_csv(result_path+'train_drl_'+ccy+'.csv', index=False, index_label=False, header=False)
-    print('epi_rewards:', epi_rewards)
+    
+    for decay_rate in hyper_params['decay_rate']:
+        for lr_rate in hyper_params['lr_rate']:
+            for gamma in hyper_params['gamma']:
+                mode = 'train'
+                config['gamma'] = gamma
+                config['lr_rate'] = lr_rate
+                config['decay_rate'] = decay_rate
+                env = Environment(X_train, config)
+                dqn_agent = DQNAgent(env, config, mode=mode, verbose=True)
+                for epoch in range(1,31):
+                    results_dict = dqn_agent.run(mode=mode, epoch=epoch)
+                    save_results(epoch, mode=mode, ccy=ccy, model=dqn_agent, results_dict=results_dict, config=config)
+
+                mode = 'test'
+                env = Environment(X_test, config)
+                for epoch in range(1,31):
+                    results_dict = dqn_agent.run(mode=mode, epoch=epoch)
+                    save_results(epoch, mode=mode, ccy=ccy, model=dqn_agent, results_dict=results_dict, config=config)
 
 
     # config['target_currency'] = ccy

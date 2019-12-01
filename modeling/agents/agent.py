@@ -30,7 +30,7 @@ class Memory:
             if i == 0:
                 rand_epi_idx = np.random.randint(self.env.config['total_no_epi'])
                 t, obs, price_tuple, is_finished = self.env.reset(rand_epi_idx)
-                state = np.append(t, obs)
+                state = obs # np.append(t, obs)
                 price, next_price = price_tuple
                 price_vector = np.array([1, price[0]])
                 temp_pf = PortfolioManagement(init_price=price_vector, M=1)
@@ -50,14 +50,14 @@ class Memory:
             reward = temp_pf.get_pf_value(-1) - temp_pf.get_pf_value(-2)   # getting a reward function will be implemented within self.env.step() later.
             
             t, next_obs, price_tuple, is_finished = self.env.step(action=action)
-            next_state = np.append(t, next_obs)
+            next_state = next_obs # np.append(t, next_obs)
             self.add((state, action, reward, next_state, is_finished, max_Q))
 
             # move to the next state
             if is_finished:
                 rand_epi_idx = np.random.randint(self.env.config['total_no_epi'])
                 t, obs, price_tuple, is_finished = self.env.reset(rand_epi_idx)
-                state = np.append(t, obs)
+                state = obs # np.append(t, obs)
             else:
                 state = next_state
     
@@ -79,35 +79,36 @@ class Memory:
 
 class Agent:
     def __init__(self, env, config, mode='train', init_wealth = 10000, verbose=False,
-                 explore_start = 1.0, explore_stop = 0.01, decay_rate = 0.00001,
-                 gamma = 0.9, test_model_path = None, max_steps=10000):
+                 explore_start = 1.0, explore_stop = 0.01,
+                 test_model_path = None, max_steps=10000):
         self.config = config
         self.env = env
         self.max_steps = max_steps
         self.explore_start = explore_start
         self.explore_stop = explore_stop
-        self.decay_rate = decay_rate
-        self.gamma = gamma
 
-        self.lr_rate = config['lr_rate']
+
         self.buffer_sz = config['buffer_sz']
-        self.epsilon = 0.97
-        self.discount = 0.99
         self.batch_sz = config['batch_sz']
         self.num_batches = config['num_batches']
+        self.epochs = config['epochs']
         self.state_sz = config['state_sz']
-        self.epochs = config['epochs'] = 10
+        self.total_no_epi = config['total_no_epi']
 
         self.wealth = init_wealth
         self.state = None
         self.verbose = verbose
 
 class DQNAgent(Agent):
-    def __init__(self, env, config, init_wealth = 10000, mode='train', print_step_frq = 10, target_net_update_frq = 1, verbose=False, memory_size=10**5, test_model_path = None):
+    def __init__(self, env, config, mode='train', init_wealth = 10000, print_step_frq = 10, target_net_update_frq = 2, verbose=False, memory_size=10**5, test_model_path = None):
         Agent.__init__(self, env, config, mode='train')
         self.target_net_update_frq = target_net_update_frq    # The frequency of setting the target net's parameters to be Q net's
         self.print_step_frq = print_step_frq
         self.action_set = config['action_set']
+        self.gamma = config['gamma']
+        self.decay_rate = config['decay_rate']
+        self.lr_rate = config['lr_rate']
+        self.mode = mode
         self.memory_size = memory_size
         self.memory = Memory(init_size = config['batch_sz'], maxlen = memory_size, env=env, action_set=self.action_set)
         self.q_net = DiscreteTradingModel(action_set=self.action_set)
@@ -135,17 +136,20 @@ class DQNAgent(Agent):
 
         return action, max_Q
 
-    def predict_action(self, state, decay_step, explore_start = 1.0, explore_stop = 0.01, decay_rate = 0.00001):
+    def predict_action(self, state, decay_step, explore_start = 1.0, explore_stop = 0.01):
         # We explore if `explore_prob` > `trade_off_prob`
+        decay_rate = self.decay_rate
         trade_off_prob = np.random.rand()
-        explore_prob = self.explore_stop + (self.explore_start - self.explore_stop)*np.exp(-self.decay_rate*decay_step)
+        explore_prob = self.explore_stop + (self.explore_start - self.explore_stop)*np.exp(-decay_rate*decay_step)
 
         if explore_prob > trade_off_prob:
             # We take a random action (exploration)
+            # print("exploration with explore_prob of {}".format(explore_prob))
             action, max_Q = self.get_random_action()
 
         else:
             # Get an estimate of Q values for each possible action
+            # print("exploitation with explore_prob of {}".format(explore_prob))
             Qs = self.q_net(state)
 
             # Get an argument that maximizes the Q values.
@@ -156,49 +160,6 @@ class DQNAgent(Agent):
             action = self.q_net.action_set[choice]
 
         return action, max_Q, explore_prob
-    
-    def learn_from_replay(self):
-        # We get tuples of (randomly chosen) experiences from memory to run a mini batch for a learning process. 
-        ####### We apply TD steps to update Q network by running batches
-        states_batch = np.empty(shape=(0, self.state_sz))
-        targets_Qs_batch = np.empty(shape=(0))
-        total_losses = []
-
-        for batch_no in range(self.num_batches):
-            # Obtain a random mini-batch list from our memory buffer.
-            # batch_list = [experience dictionary #1, #2, ..., #batch_sz]
-            batch_list = self.memory.sample(self.batch_sz)
-
-            # Get a list of states, a list of actions, ... from all experiences in this mini-batch("mb")
-            states_mb = np.array([expr_dict['state'] for expr_dict in batch_list])
-            actions_mb = np.array([expr_dict['action'] for expr_dict in batch_list])
-            rewards_mb = np.array([expr_dict['reward'] for expr_dict in batch_list])
-            next_states_mb = np.array([expr_dict['next_state'] for expr_dict in batch_list])
-            is_finished_mb = np.array([expr_dict['is_finished'] for expr_dict in batch_list])
-            max_Q_mb = np.array([expr_dict['max_Q'] for expr_dict in batch_list])
-
-            target_Qs_mb = []
-
-            # Get a batch_sz-length list of target Q values in this batch.
-            Qs_at_next_state = [self.target_net(next_state) for next_state in next_states_mb]
-            for i in range(self.batch_sz):
-                idx = batch_no*self.batch_sz+i
-                is_finished = is_finished_mb[i]
-                if is_finished:
-                    target_Qs_mb.append(rewards_mb[i])
-                else:
-                    target = rewards_mb[i] + self.gamma*np.max(Qs_at_next_state[i])
-                    target_Qs_mb.append(target)
-
-            states_batch = np.vstack((states_batch, states_mb))
-            target_Qs_mb = np.array(target_Qs_mb)
-            targets_Qs_batch = np.append(targets_Qs_batch, target_Qs_mb)
-
-            # Update Q networks using Target Qs from this mini-batch.
-            losses = self.q_net.fit(states_mb, target_Qs_mb, verbose=1)
-            total_losses.append(losses)
-        
-        return total_losses
 
     def learn_from_replay_batch(self):
         # We get tuples of (randomly chosen) experiences from memory to run a mini batch for a learning process. 
@@ -238,39 +199,42 @@ class DQNAgent(Agent):
             targets_Qs_batch = np.append(targets_Qs_batch, target_Qs_mb)
 
         # Update Q networks using Target Qs from this mini-batch.
-        losses = self.q_net.fit(states_batch, targets_Qs_batch, epochs=self.epochs, verbose=0)
+        losses = self.q_net.fit(states_batch, targets_Qs_batch, validation_split=0.2, epochs=self.epochs, verbose=0)
         
         # return a mean of losses in this whole batch.
-        return tf.reduce_mean(losses.history['loss'])
+        return tf.reduce_mean(losses.history['loss']), tf.reduce_mean(losses.history['val_loss'])
 
     def update_target_net(self, epi_idx):
         if self.q_net.get_weights()[0].shape == self.target_net.get_weights()[0].shape:
             # We only updates target net's weights when 'Q networks' was chosen to use
             # during the 'e-greedy selection' in predict_action().
             self.target_net.set_weights(self.q_net.get_weights())
-            print('The target network is updated by cloning the Q nets parameters at Episode {:2d}'.format(epi_idx+1))
+            if self.verbose:
+                print('The target network is updated by cloning the Q nets parameters at Episode {:2d}'.format(epi_idx+1))
         
-    def train(self):
+    def run(self, mode='train', epoch=1):
         # We use `decay_step` and `decay_rate` when we do a variant of the e-greedy strategy.
         decay_step = 0
-        for epi_idx, epi_no in enumerate(np.random.permutation(self.config['total_no_epi'])):
-            episode_rewards = []
-            accum_rewards = []
-            accum_losses = np.empty(shape=(0))
-            action_history = []
-            state_history = []
+        epi_rewards = []
+        epi_losses = []
+        epi_val_losses = []
+        epi_actions = []
+        epi_pf_values = []
+
+        for epi_idx, epi_no in enumerate(np.random.permutation(self.total_no_epi)):
+            step_rewards = np.empty(shape=(0))
+            step_losses = np.empty(shape=(0))
+            step_val_losses = np.empty(shape=(0))
+            step_actions = np.empty(shape=(0), dtype=np.int)
+            step_pf_values = np.empty(shape=(0))
             
             # Reset the environment whenever a new episode starts
             t, obs, price_tuple, is_finished = self.env.reset(epi_no)  # epi_no a random index
 
             # We have returned step counter t, state(=feature) from the environment.
             # No action is taken yet.
-            state = np.append(t, obs)
-            state_history.append(state)
+            state = obs # np.append(t, obs)
             action = 0  # initialize an action to be no tprice_vectorrade
-
-            episode_rewards.append(0.)
-            accum_rewards.append(0.)
 
             # `price` is FX rates for ONE currency pair (config['target_currency'])
             price, next_price = price_tuple
@@ -285,11 +249,13 @@ class DQNAgent(Agent):
             while not is_finished:
                 decay_step += 1
 
+                # print('price: {} -> {}, action {}'.format(price[0], next_price[0], action))
+
                 # Predict an action to take, take it and add it into a history list.
                 # The nueral networks are called during self.predict_action() being executed
                 # action is a scalar: -1 is short, 0 is neutral (no trade), 1 is long.
                 # max_Q is the maximum of Q values, which was chosen as this 'action'
-                action, max_Q, _ = self.predict_action(state=state, decay_step=decay_step)
+                action, max_Q, exploration_prob = self.predict_action(state=state, decay_step=decay_step)
                 # action_history.append(action)
 
                 # Get a target weight for trading
@@ -300,36 +266,55 @@ class DQNAgent(Agent):
                 #   append self.wt, self.qty, self.price, self.rel_price into the corresponding lists.
                 pf.trade(cur_wt=pf.wt[-1], target_wt=target_wt, target_price=next_price[0])
                 
-                reward = pf.get_pf_value(-1) - pf.get_pf_value(-2)   # getting a reward function will be implemented within self.env.step() later.
-                # print('Action:{}, Price:{}, Next price:{}, Portfolio value {}, Reward {}'.format(action,  price[0], next_price[0], pf.get_pf_value(), reward))
+                reward = pf.get_pf_value(-2) - pf.get_pf_value(-1)   # getting a reward function will be implemented within self.env.step() later.
 
                 t, next_obs, price_tuple, is_finished = self.env.step(action=action)
                 price, next_price = price_tuple
 
+                # print('reward: {}'.format(reward))
+
                 # This immediate reward will be summed up as 'total reweards' later
-                episode_rewards.append(reward)
-                accum_rewards.append(accum_rewards[-1] + reward)
+                step_rewards = np.append(step_rewards, reward)
+                step_actions = np.append(step_actions, action)
+                step_pf_values = np.append(step_pf_values, pf.get_pf_value())
 
-                next_state = np.append(t, next_obs)
-                # state_history.append(next_state)
+                next_state = next_obs #np.append(t, next_obs)
 
-                # Add experience into a memory buffer. This expeirence is about how an episode ends.
-                self.memory.add((state, action, reward, next_state, is_finished, max_Q))
+                if mode == 'train':
+                    # Add experience into a memory buffer. This expeirence is about how an episode ends.
+                    self.memory.add((state, action, reward, next_state, is_finished, max_Q))
 
-                mean_loss = self.learn_from_replay_batch()
-                print('Episode/Time step {:2d}/{:2d}. A mean loss of {:.4f} from replay-learning'.format(epi_idx+1, t, mean_loss))
-
+                    mean_loss, mean_val_loss = self.learn_from_replay_batch()
+                    # accum_losses = np.append(accum_losses, mean_loss.numpy())
+                    # accum_val_losses = np.append(accum_val_losses, mean_val_loss.numpy())
+                    step_losses = np.append(step_losses, mean_loss.numpy())
+                    step_val_losses = np.append(step_val_losses, mean_val_loss.numpy())
+                
+                if self.verbose:
+                    print('Epoch {:2d}. Episode/Time step {:2d}/{:2d}. A mean loss of {:.4f} from replay-learning with exploration probability of {:.2f}'.format(epoch, epi_idx+1, t, mean_loss, exploration_prob))
             ### end of trading ###
+            epi_rewards.append(np.sum(step_rewards))
+            epi_actions.append(step_actions)
+            epi_pf_values.append(step_pf_values)
+            if mode == 'train':
+                epi_losses.append(np.sum(step_losses))
+                epi_val_losses.append(np.sum(step_losses))
+                print('## Epoch {:2d}. Episode {:2d}. Total rewards {:.2f}. Mean loss {:.2f} with exploration probability of {:.2f} ##'.format(epoch, epi_idx+1, tf.reduce_sum(step_rewards), np.average(step_losses), exploration_prob))
+                if epi_idx % self.target_net_update_frq == 0:    # epi_idx is a sequencial order (0, 1, 2, .. up to total_no_epi)
+                    self.update_target_net(epi_idx)
+            else:
+                print('## Epoch {:2d}. Episode {:2d}. Total rewards {:.2f}. ##'.format(epoch, epi_idx+1, tf.reduce_sum(step_rewards)))
 
-            print('Episode {:2d}. Total rewards {:.2f}. Portfolio value {:5.2f}'.format(epi_idx+1, tf.reduce_sum(episode_rewards), pf.get_pf_value()))
 
-            # if step % self.print_step_frq == 0:
-            #     print('Epoch:{} Episode:{} Step:{}. The training loss is {}. The average loss is {}. Total rewards: {}'.format(epoch+1, epi_idx+1, step, losses, np.average(accum_losses), accum_rewards[-1]))
-
-            if epi_idx % self.target_net_update_frq == 0:    # epi_idx is a sequencial order (0, 1, 2, .. up to total_no_epi)
-                self.update_target_net(epi_idx)
+        results_dict = {
+            'epi_rewards': epi_rewards,
+            'epi_losses': epi_losses,
+            'epi_val_losses': epi_val_losses,
+            'epi_actions': epi_actions,
+            'epi_pf_values': epi_pf_values
+        }
         
-        return accum_rewards
+        return results_dict
 
 
 class SimpleDRLAgent(Agent):
@@ -411,7 +396,6 @@ class SimpleDRLAgent(Agent):
         # Average rewards per epoch
         epochs_total_rewards = []
 
-        
         # mean reversion agent
         mean_rev_lookback = 20
         accum_losses = np.zeros((self.config['total_no_epi'],))
