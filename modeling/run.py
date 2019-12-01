@@ -126,27 +126,3 @@ for ccy in ccy_list:
                 results_dict = dqn_agent.run(mode=mode, epoch=epoch)
                 save_results(epoch, mode=mode, ccy=ccy, model=dqn_agent, results_dict=results_dict, config=config)
 
-
-    # config['target_currency'] = ccy
-    # model = SimpleModel()
-    # env = Environment(X_train, config, num_agents=1)
-    # simple_agent = SimpleDRLAgent(model, env, config, verbose=False)
-    # epi_rewards, epi_rewards_mean_rev, losses = simple_agent.train()
-    # drl_model = pd.DataFrame(epi_rewards)
-    # mean_rev_model = pd.DataFrame(epi_rewards_mean_rev)
-    
-    # losses_drl = pd.DataFrame(losses)
-    # drl_model.to_csv(result_path+'train_drl_'+ccy+'.csv', index=False, index_label=False, header=False)
-    # mean_rev_model.to_csv(result_path+'train_mean_rev_'+ccy+'.csv', index=False, index_label=False, header=False)
-    # losses_drl.to_csv(result_path+'drl_losses_'+ccy+'.csv', index=False, index_label=False, header=False)
-    # print(epi_rewards, epi_rewards_mean_rev)
-
-    # env_val = Environment(X_val, config, num
-    # _agents=1)
-    # simple_agent_val = SimpleDRLAgent(model, env_val, config, verbose=False)
-    # epi_rewards_val, epi_rewards_mean_rev_val = simple_agent_val.val()
-    # drl_model = pd.DataFrame(epi_rewards_val)
-    # mean_rev_model = pd.DataFrame(epi_rewards_mean_rev_val)
-    # drl_model.to_csv(result_path+'test_drl_'+ccy+'.csv', index=False, index_label=False, header=False)
-    # mean_rev_model.to_csv(result_path+'test_mean_rev_'+ccy+'.csv', index=False, index_label=False, header=False)
-    # print(epi_rewards_val, epi_rewards_mean_rev_val)
