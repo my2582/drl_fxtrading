@@ -30,8 +30,8 @@ config = {}
 ## setting for a toy dataset
 config['lag'] = 5
 config['epochs'] = 10
-config['epi_sz'] = 20   # epi_sz is equal to the number of possible time steps in one epidoe.
-config['total_no_epi'] = 30  # floor(91057/1460), 91057 == # rows of any currency.
+config['epi_sz'] = 30   # epi_sz is equal to the number of possible time steps in one epidoe.
+config['total_no_epi'] = 20  # floor(91057/1460), 91057 == # rows of any currency.
 config['num_batches'] = 5
 config['batch_sz'] = 8
 #######################
@@ -47,7 +47,7 @@ config['state_sz'] = 9*config['lag']   # state = [time step, 9*lag log returns]
 config['split_sz'] = config['epi_sz'] + config['lag']
 config['lr_rate'] = 0.001
 config['momentum'] = 0.9
-
+config['decay_rate'] = 0.03
 config['bins'] = np.concatenate([[-10], np.arange(-1e-4, 1.1e-4, 1e-5), [10]])
 config['channels'] = 30
 config['buffer_sz'] = 50000
@@ -67,17 +67,18 @@ assert config['total_no_epi']*config['split_sz'] <= np.min([X_train[key].shape[0
 
 tf.keras.backend.set_floatx('float32')
 
-ccy_list = ['gbpusd', 'eurusd', 'chfusd', 'nokusd', 'sekusd', 'cadusd', 'audusd', 'nzdusd', 'jpyusd']
+# ccy_list = ['gbpusd', 'eurusd', 'chfusd', 'nokusd', 'sekusd', 'cadusd', 'audusd', 'nzdusd', 'jpyusd']
 # ccy_list = ['gbpusd']
+ccy_list = ['gbpusd', 'eurusd', 'jpyusd']
 result_path = {
     'gbpusd': '../results/final/gbpusd/',
     'eurusd': '../results/final/eurusd/',
-    'chfusd': '../results/final/chfusd/',
-    'nokusd': '../results/final/nokusd/',
-    'sekusd': '../results/final/sekusd/',
-    'cadusd': '../results/final/cadusd/',
-    'audusd': '../results/final/audusd/',
-    'nzdusd': '../results/final/nzdusd/',
+    # 'chfusd': '../results/final/chfusd/',
+    # 'nokusd': '../results/final/nokusd/',
+    # 'sekusd': '../results/final/sekusd/',
+    # 'cadusd': '../results/final/cadusd/',
+    # 'audusd': '../results/final/audusd/',
+    # 'nzdusd': '../results/final/nzdusd/',
     'jpyusd': '../results/final/jpyusd/'
 } 
 
@@ -85,9 +86,8 @@ hyper_params = {
     # 'gamma': [0.9, 0.7, 0.5],
     # 'lr_rate': [0.001, 0.05, 0.01],
     # 'decay_rate': [0.01, 0.005, 0.001]
-    'gamma': [0.9],
-    'lr_rate': [0.001],
-    'decay_rate': [0.01]
+    'gamma': [0.9, 0.7, 0.5],
+    'lr_rate': [0.001, 0.01],
 }
 
 def save_results(epoch, mode, ccy, model, results_dict, config):
@@ -109,24 +109,22 @@ def save_results(epoch, mode, ccy, model, results_dict, config):
 for ccy in ccy_list:
     config['target_currency'] = ccy
     
-    for decay_rate in hyper_params['decay_rate']:
-        for lr_rate in hyper_params['lr_rate']:
-            for gamma in hyper_params['gamma']:
-                mode = 'train'
-                config['gamma'] = gamma
-                config['lr_rate'] = lr_rate
-                config['decay_rate'] = decay_rate
-                env = Environment(X_train, config)
-                dqn_agent = DQNAgent(env, config, mode=mode, verbose=True)
-                for epoch in range(1,31):
-                    results_dict = dqn_agent.run(mode=mode, epoch=epoch)
-                    save_results(epoch, mode=mode, ccy=ccy, model=dqn_agent, results_dict=results_dict, config=config)
+    for lr_rate in hyper_params['lr_rate']:
+        for gamma in hyper_params['gamma']:
+            mode = 'train'
+            config['gamma'] = gamma
+            config['lr_rate'] = lr_rate
+            env = Environment(X_train, config)
+            dqn_agent = DQNAgent(env, config, mode=mode, verbose=True)
+            for epoch in range(1,21):
+                results_dict = dqn_agent.run(mode=mode, epoch=epoch)
+                save_results(epoch, mode=mode, ccy=ccy, model=dqn_agent, results_dict=results_dict, config=config)
 
-                mode = 'test'
-                env = Environment(X_test, config)
-                for epoch in range(1,31):
-                    results_dict = dqn_agent.run(mode=mode, epoch=epoch)
-                    save_results(epoch, mode=mode, ccy=ccy, model=dqn_agent, results_dict=results_dict, config=config)
+            mode = 'test'
+            env = Environment(X_test, config)
+            for epoch in range(1,21):
+                results_dict = dqn_agent.run(mode=mode, epoch=epoch)
+                save_results(epoch, mode=mode, ccy=ccy, model=dqn_agent, results_dict=results_dict, config=config)
 
 
     # config['target_currency'] = ccy

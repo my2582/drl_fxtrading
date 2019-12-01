@@ -136,7 +136,7 @@ class DQNAgent(Agent):
 
         return action, max_Q
 
-    def predict_action(self, state, decay_step, explore_start = 1.0, explore_stop = 0.01):
+    def predict_action(self, state, decay_step, explore_start = 1.0, explore_stop = 0.03):
         # We explore if `explore_prob` > `trade_off_prob`
         decay_rate = self.decay_rate
         trade_off_prob = np.random.rand()
@@ -266,7 +266,7 @@ class DQNAgent(Agent):
                 #   append self.wt, self.qty, self.price, self.rel_price into the corresponding lists.
                 pf.trade(cur_wt=pf.wt[-1], target_wt=target_wt, target_price=next_price[0])
                 
-                reward = pf.get_pf_value(-2) - pf.get_pf_value(-1)   # getting a reward function will be implemented within self.env.step() later.
+                reward = pf.get_pf_value(-1) - pf.get_pf_value(-2)   # getting a reward function will be implemented within self.env.step() later.
 
                 t, next_obs, price_tuple, is_finished = self.env.step(action=action)
                 price, next_price = price_tuple
